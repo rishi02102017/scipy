@@ -1,0 +1,48 @@
+name: verify
+on:
+  push:
+    branches: [ci/whittaker-weights-fix]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install nightly scipy
+        run: |
+          pip install --pre -i https://pypi.anaconda.org/scientific-python-nightly-wheels/simple scipy
+          pip install pytest hypothesis pooch
+          (cd /tmp && python -c "import scipy, numpy; print(scipy.__version__, numpy.__version__)")
+      - name: Baseline (new test, unmodified _whittaker.py) - expected to fail
+        run: |
+          SP=$(cd /tmp && python -c "import scipy, os; print(os.path.dirname(scipy.__file__))")
+          cp scipy/signal/tests/test_whittaker.py $SP/signal/tests/
+          cd /tmp
+          python -m pytest --pyargs scipy.signal.tests.test_whittaker -q -p no:cacheprovider 2>&1 | tail -25 || true
+      - name: Fixed (overlay _whittaker.py) - full module
+        run: |
+          SP=$(cd /tmp && python -c "import scipy, os; print(os.path.dirname(scipy.__file__))")
+          cp scipy/signal/_whittaker.py $SP/signal/
+          cd /tmp
+          python -m pytest --pyargs scipy.signal.tests.test_whittaker -v -p no:cacheprovider 2>&1 | tail -80
+          python -m pytest --pyargs scipy.signal.tests.test_whittaker -q -p no:cacheprovider
+      - name: Fixed - whole scipy.signal test suite
+        run: |
+          cd /tmp
+          python -m pytest --pyargs scipy.signal -q -p no:cacheprovider -n 0 2>&1 | tail -5 || python -m pytest --pyargs scipy.signal -q -p no:cacheprovider | tail -5
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff cython-lint packaging && ruff --version
+      - run: python tools/linting/lint.py --files scipy/signal/_whittaker.py scipy/signal/tests/test_whittaker.py
+      - run: python tools/linting/check_unicode.py
+      - run: python tools/linting/check_test_name.py
+      - run: python tools/linting/check_nondefault_device.py
