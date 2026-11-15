@@ -1,0 +1,19 @@
+name: probe
+on:
+  push:
+    branches: [ci/whittaker-probe]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        which: [release, nightly]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          if [ "${{ matrix.which }}" = release ]; then pip install scipy==1.18.1; else pip install --pre -i https://pypi.anaconda.org/scientific-python-nightly-wheels/simple scipy; fi
+      - run: python probe.py
